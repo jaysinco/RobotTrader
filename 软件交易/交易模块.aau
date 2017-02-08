@@ -1,0 +1,438 @@
+﻿import aspriseOCR
+import console
+import process
+import winex
+import win.clip
+import com.picture
+import winex.key
+import winex.mouse
+
+
+/*
+  交易模块
+*/
+交易模块 = {}
+
+交易模块.初始化 = function(配置信息){
+    owner.句柄 = {}
+    owner.当前界面 = {'F4'; null}    // 跟踪当前界面，分为两部分
+    owner.用户信息 = {}
+    owner.用户信息.用户名 = 配置信息.用户名
+    owner.用户信息.密码 = 配置信息.密码
+    owner.用户信息.exePath = 配置信息.exePath
+}
+
+
+/*
+  日志输出函数
+*/ 
+
+交易模块.log = function(str, tag='Systm', color='0x07', write_instant=false){
+/*
+CMD颜色模式如下：
+    FOREGROUND_BLACK = 0x00 # black.
+    FOREGROUND_DARKBLUE = 0x01 # dark blue.
+    FOREGROUND_DARKGREEN = 0x02 # dark green.
+    FOREGROUND_DARKSKYBLUE = 0x03 # dark skyblue.
+    FOREGROUND_DARKRED = 0x04 # dark red.
+    FOREGROUND_DARKPINK = 0x05 # dark pink.
+    FOREGROUND_DARKYELLOW = 0x06 # dark yellow.
+    FOREGROUND_DARKWHITE = 0x07 # dark white.
+    FOREGROUND_DARKGRAY = 0x08 # dark gray.
+    FOREGROUND_BLUE = 0x09 # blue.
+    FOREGROUND_GREEN = 0x0a # green.
+    FOREGROUND_SKYBLUE = 0x0b # skyblue.
+    FOREGROUND_RED = 0x0c # red.
+    FOREGROUND_PINK = 0x0d # pink.
+    FOREGROUND_YELLOW = 0x0e # yellow.
+    FOREGROUND_WHITE = 0x0f # white.
+*/
+    var tm = tostring(time.now())
+    io.stdout.write(string.format("%s <>  ", tm))
+    //console.setTextAttribute(color)
+	io.stdout.write(str+'\n')  
+	//console.setTextAttribute('0x07') 	
+}
+
+
+/*
+  事件处理
+*/
+交易模块.setText = function(handle, txt, isCheck=true){
+    // 检查句柄是否为空
+    if (!handle){
+        owner.log(string.format("向空句柄发送%s失败！", handle, txt), 'Error', '0x0c')
+        error('User Defined Error')
+    }
+    
+    // 是否检查键入的正确性
+    if (isCheck){
+        var tryTime = 1
+    	while (tryTime < 10 and winex.getText(handle) != txt){
+        	winex.setText(handle, txt)
+        	sleep(100)
+        	tryTime += 1
+    	}
+    	if (tryTime >= 10){
+        	owner.log(string.format("向句柄%d发送%s失败！", handle, txt), 'Error', '0x0c')
+        	error('User Defined Error')
+    	}    
+    }else{
+        winex.setText(handle, txt)
+        sleep(150)
+        winex.setText(handle, txt)
+    } 
+}
+
+
+交易模块.getClipContent = function(handle, checkStr){
+    winex.attach(handle)
+    win.clip.write("")     // 清空剪贴板
+    var res = win.clip.read()
+    while( not ( res and string.find(res, checkStr) ) ){
+        sleep(900)
+        win.setForeground(owner.句柄.交易外边框)                       // ★★ 获取剪贴板内容必须前台
+        winex.key.combine(handle,"CTRL","C"); sleep(100)      
+        res = win.clip.read()        
+    }   
+    winex.attach(owner.句柄.持仓表格,false)
+    return res
+}
+
+
+交易模块.keyClick = function(激活句柄, 点击句柄, keyValue){                 // ★★ 按快捷键必须前台
+    win.setForeground(激活句柄)
+    winex.key.click(激活句柄, keyValue)
+    sleep(20)
+}
+
+
+/*
+  买卖股票
+*/
+交易模块.买卖 = function(代码, 价格, 数量, 方向){
+    owner.句柄.买卖界面代号 := {["买入"] = 'F1'; ["卖出"] = 'F2'}     
+    var 界面代号 = owner.句柄.买卖界面代号[方向]
+    // ★★ 按快捷键必须前台
+    if (owner.当前界面[1] != 界面代号){          	
+     	owner.keyClick(owner.句柄.交易顶层, owner.句柄.交易左侧菜单, 界面代号)
+    	owner.当前界面[1] = 界面代号 
+    }  
+    // 前3个参数缺省，为了方便初始化
+    if (not (代码 and 价格 and 数量))  return null
+    
+    // 订单输出
+    Flag = 'Trade'
+    owner.log("*** "+方向+"股票"+" ***", Flag, 0x0E)
+    owner.log('要求以'++价格++"元/股"++方向++数量++"股"++代码, Flag)
+    
+    // 填入买卖信息
+    owner.句柄.买卖句柄号 := {
+        ['买入'] = {['代码'] = 1; ['价格'] = 2; ['数量'] = 3};
+        ['卖出'] = {['代码'] = 7; ['价格'] = 8; ['数量'] = 9};
+    }
+    owner.setText(winex.findEx(owner.句柄.交易顶层, owner.句柄.买卖句柄号[方向]['代码'],'Edit'), 代码);sleep(200)    
+    owner.setText(winex.findEx(owner.句柄.交易顶层, owner.句柄.买卖句柄号[方向]['价格'],'Edit'), 价格);sleep(200) 
+    owner.setText(winex.findEx(owner.句柄.交易顶层, owner.句柄.买卖句柄号[方向]['数量'],'Edit'), 数量)
+    
+    // 点击买卖按钮，处理提示
+    owner.句柄[方向+'按钮'] := winex.findEx(窗口句柄,,"Button",方向,1006)
+    winex.click(owner.句柄[方向+'按钮']); sleep(200)
+     //winex.findEx(窗口句柄,1,"Static","提交失败：",1004)
+    owner.句柄.买卖提示顶层,owner.句柄.买卖提示之确定 = winex.wait(,"确定","\#\d+","Button",2)
+    owner.句柄.买卖提示文字 = winex.findEx(owner.句柄.买卖提示顶层,1,"Static")
+    var 提示文字 = winex.getText(owner.句柄.买卖提示文字)
+    winex.click(owner.句柄.买卖提示之确定)
+    var _, _, 买卖合同编号 = string.find(提示文字, "合同编号：(.*?)。")
+    if (买卖合同编号){
+        var info_msg = '订单('+买卖合同编号+')已成功提交!'
+        owner.log(info_msg, Flag)
+    	return 买卖合同编号
+    }else{
+        var info_msg = '订单提交失败,错误信息 => '+提示文字
+        owner.log(info_msg, 'Error', '0x0C')
+        return null
+    }	
+}
+
+
+/*
+  查询可撤订单
+*/
+交易模块.撤单 = function(合同编号){
+    // ★★ 按快捷键必须前台
+     if (owner.当前界面[1] != 'F3'){          	
+     	owner.keyClick(owner.句柄.交易顶层, owner.句柄.交易左侧菜单, 'F3')
+    	owner.当前界面[1] = 'F3'  
+    }  
+    // 刷新
+    owner.keyClick(owner.句柄.交易顶层, owner.句柄.交易左侧菜单, 'F5') 
+    owner.句柄.撤单表格 := winex.findEx(owner.句柄.交易顶层,3,"CVirtualGridCtrl")
+    var str = 交易模块.getClipContent(owner.句柄.撤单表格, '委托时间')
+
+    //给参数就是撤单    
+        //撤单返回状态码：1 成功  0 合同编号不存在  -1 撤单撤错   
+    if (合同编号 and 合同编号 != 'all'){       	    
+        Flag = 'Minus'
+        owner.log('*** 撤单请求 ***', Flag, '0x0E')
+               
+        var lines = string.split(str, '\n')			
+		// 没有任何委托
+		if (#lines < 2) {
+	    	owner.log("要求的撤单("+合同编号+")撤单失败，可撤订单列表为空!", 'Error', '0x0C')
+	    	return 0
+		}			
+		// 查找委托序列号
+		var N = 0
+		for (i=2;#lines){
+    		items = string.split(lines[i], '\t')
+    		if (items[11] == 合同编号){ N = i-1; break}
+		}		
+    	//  撤单是否存在
+		if (N==0){
+	    	owner.log("要求的撤单("+合同编号+")撤单失败，可撤订单列表中不存在该合同!", 'Error', '0x0C')
+	    	return 0 
+		}else  
+		    owner.log("要求的撤单("++合同编号++")在可撤订单列表中的第"++N++"项", Flag)		
+		    	
+		// Enter第N个项目撤单
+		owner.keyClick(owner.句柄.撤单表格, owner.句柄.撤单表格, 'PgUp') 
+		if (N==1)
+	    	owner.keyClick(owner.句柄.撤单表格, owner.句柄.撤单表格, 'Enter') 			
+		else {
+	     	for (i=1;N-1)   owner.keyClick(owner.句柄.撤单表格, owner.句柄.撤单表格, 'DOWN') 	     		
+	     	owner.keyClick(owner.句柄.撤单表格, owner.句柄.撤单表格, 'Enter') 
+		}  
+		
+		// 撤单提示, 提示不能用:=
+		owner.句柄.撤单提示顶层, owner.句柄.撤单提示之确定 = winex.wait( ,"确定","\#\d+","Button",2)
+		owner.句柄.撤单提示文字 = winex.findEx(owner.句柄.撤单提示顶层,1,"Static")
+        var 提示文字 = winex.getText(owner.句柄.撤单提示文字)
+		var _, _, 撤单合同编号 = string.find(提示文字, "撤单委托已成功提交，合同编号：(.*?)。")
+		winex.click(owner.句柄.撤单提示之确定)
+		if (撤单合同编号 == 合同编号){
+		    owner.log("要求的撤单("++合同编号++")已经成功提交!", Flag)
+		    return 1
+		}else{
+		    owner.log("撤单错误，要求("++合同编号++") => 实际("++撤单合同编号++")", 'Error', '0x0C')
+		    return -1
+		}		  
+    } 
+    // 合同编号为'all', 则委托单全撤
+    elseif(合同编号 == 'all'){
+        owner.log('*** 撤单请求 ***', Flag, '0x0E')
+        owner.log('要求订单全撤!', Flag)
+        owner.句柄.订单全撤 :=  winex.findEx(owner.句柄.交易顶层,,"Button","全撤",30001)
+        winex.click(owner.句柄.订单全撤)
+        owner.log('订单全撤委托已经成功提交!', Flag)
+        return 1
+    }
+    //不给参数就是查询撤单列表         
+    else{     
+        Flag = 'Query'
+        owner.log('*** 委托列表 ***', Flag, '0x0E')
+        var res = {}
+    	var lines = string.split(str, '\n')			
+		if (#lines == 1) {
+		    owner.log('可撤委托列表为空!', Flag)
+		    return res
+		}			
+		for (i=2;#lines){
+    		items = string.split(lines[i], '\t')
+    		res[#res+1] = {     	    
+    			["证券代码"] = items[1];
+    			["证券名称"] = items[2];
+    			["备注"] = items[3];    		    		
+    			["委托数量"] = tonumber(items[4]);
+    			["成交数量"] = tonumber(items[5]);
+    			["委托价格"] = tonumber(items[6]);
+    			["成交均价"] = tonumber(items[7]);
+    			["操作"] = items[8];
+    			["委托时间"] = items[9];
+    			["委托日期"] = items[10];
+    			["合同编号"] = items[11]; 
+    			["交易市场"] = items[12]; 
+    			["股东账户"] = items[13]; 
+    			["订单类型"] = items[14];    		  		 
+    		}
+    	}
+    	// 输出    	
+    	owner.log(string.format("%s%12.12s  %5.5s  %s %s", "证券代码", "证券名称", "操作", "委托数量", "委托价格"), Flag)
+    	owner.log('---------------------------------------------', Flag)
+    	for (i=1; #res){   
+        	var entry = res[i]            
+        	owner.log(string.format("%s%12.12s  %6.6s    %5.5s   %.2f/元", entry["证券代码"], entry["证券名称"], entry["操作"], entry["委托数量"], entry["委托价格"]), Flag)
+    	}
+		return res    
+    }
+}
+
+
+/*
+  查询持仓
+*/
+交易模块.查询持仓 = function(){
+    Flag = 'Query'
+    owner.log('*** 持仓状态 ***', Flag, '0x0E')
+    // ★★ 按快捷键必须前台
+    if (owner.当前界面[1] != 'F4'){     
+     	owner.keyClick(owner.句柄.交易顶层, owner.句柄.交易左侧菜单, 'F4')
+    	owner.当前界面[1] = 'F4'  
+    }     
+    // 刷新
+    owner.keyClick(owner.句柄.交易顶层, owner.句柄.交易左侧菜单, 'F5')   
+    var str = 交易模块.getClipContent(owner.句柄.持仓表格, '可申赎数量')      
+        
+    // 返回持仓结果
+    var res = {}
+    var lines = string.split(str, '\n')			
+	if (#lines == 1) return res			
+	for (i=2;#lines){
+    	items = string.split(lines[i], '\t')
+    	if (tonumber(items[3]) > 0){    	// 剔除持仓为0的情况
+    		res[#res+1] = {
+    			["证券代码"] = items[1];
+    			["证券名称"] = items[2];
+    			["股票余额"] = tonumber(items[3]);
+    			["可用余额"] = tonumber(items[4]);
+    			["冻结数量"] = tonumber(items[5]);
+    			["盈亏"] = tonumber(items[6]);
+    			["成本价"] = tonumber(items[7]);
+    			["盈亏比例"] = tonumber(items[8]);
+    			["市价"] = tonumber(items[9]);
+    			["市值"] = tonumber(items[10]);	
+    			["交易市场"] = items[11];	  
+    			["股东账户"] = items[12];
+    			["实际数量"] = tonumber(items[13]);
+    			["可申赎数量"] = tonumber(items[14]);  		      			    
+    		}
+        }
+	}
+	// 输出    
+    owner.log(string.format("%s%12.12s  %5.5s   %s%%", "证券代码", "证券名称", "持仓", "盈亏比例"), Flag)
+    owner.log('----------------------------------------', Flag)
+    for (i=1; #res){   
+        var entry = res[i]           
+        owner.log(string.format("%s %12.12s  %5.5s    %.2f%%", entry["证券代码"], entry["证券名称"], entry["股票余额"], entry["盈亏比例"]), Flag)
+    }
+	return res   
+}
+
+
+/*
+  查询可用资金
+*/
+交易模块.查询账户资金 = function(){ 
+    Flag = 'Query'
+    owner.log('*** 账户查询 ***', Flag, '0x0E')
+    // ★★ 按快捷键必须前台
+    if (owner.当前界面[1] != 'F4'){     
+     	owner.keyClick(owner.句柄.交易顶层, owner.句柄.交易左侧菜单, 'F4')
+    	owner.当前界面[1] = 'F4'  
+    }     
+    // 刷新  
+    owner.keyClick(owner.句柄.交易顶层, owner.句柄.交易左侧菜单, 'F5')
+    交易模块.getClipContent(owner.句柄.持仓表格, '可申赎数量')       // 等待界面刷新完毕
+    
+    // 获取可用资金并转数字    
+    _, owner.句柄.可用资金 = winex.wait("网上股票交易系统5","\d+\.\d+","Afx\:\d+\:b\:\d+\:\d+\:\w+","Static",1016)
+    _, owner.句柄.总资产 = winex.wait("网上股票交易系统5","\d+\.\d+","Afx\:\d+\:b\:\d+\:\d+\:\w+","Static",1015)
+    var res = {}
+    var 可用资金str = winex.getText(owner.句柄.可用资金)   
+    var 总资产str = winex.getText(owner.句柄.总资产) 
+    owner.log('总资产  :  '+总资产str+' 元/人民币', Flag) 
+    owner.log('可用资金:  '+可用资金str+' 元/人民币', Flag) 
+    res['可用资金'] = tonumber(可用资金str) 
+    res['总资产'] = tonumber(总资产str)
+    return res
+}
+
+
+/*
+  登陆
+*/ 
+交易模块.登陆 = function(){
+    Flag = 'Login'
+    // 启动交易软件
+    var exePath = owner.用户信息.exePath
+    owner.log('****** 交易软件启动 ******', Flag, '0x0A')
+	owner.log('路径ABS: '+exePath, Flag)
+	process.execute(exePath)
+	
+	// 输入账号和密码
+	owner.句柄.登陆顶层 = winex.wait( "用户登录",,"\#\d+","ComboBox",1011)
+	owner.句柄.用户名 = winex.findEx(owner.句柄.登陆顶层,1,"Edit")	   
+    owner.setText(owner.句柄.用户名, owner.用户信息.用户名)	
+	owner.句柄.密码 = winex.findEx(owner.句柄.登陆顶层,2,"Edit")	   
+    owner.setText(owner.句柄.密码, owner.用户信息.密码, false)
+    
+    // 通过验证码验证
+    var 尝试次数 = 0  
+    while (true){
+        // OCR识别
+        尝试次数 += 1
+        owner.句柄.验证码图 := winex.findEx(owner.句柄.登陆顶层,1,"Static")
+        winex.mouse.click(owner.句柄.验证码图); sleep(50)    
+    	win.setForeground(owner.句柄.登陆顶层)                                         // ★★ 保存验证码图片必须前台
+    	var pic = com.picture.snap(owner.句柄.登陆顶层,151,181,68,23)
+		pic.Save( "\验证码抓屏.bmp" ); sleep(50)
+    	var str = aspriseOCR.ocr("\验证码抓屏.bmp")
+        	// 初步判断识别正确性：去除非字母,判断宽是否为4
+		str = string.trim(str, "\n"); str = string.replace(str, "\A", "")
+		owner.log(string.format("OCR[%2.2s]:    %4.4s",尝试次数, str), Flag)
+		if (#str != 4) 
+		    continue
+		
+		// 发送识别验证码
+		owner.句柄.验证码 := winex.findEx(owner.句柄.登陆顶层,7,"Edit")
+		owner.setText(owner.句柄.验证码, str)
+		
+		// 点击确定按钮
+		owner.句柄.登陆确定 := winex.findEx(owner.句柄.登陆顶层,1,"Button")
+		winex.click(owner.句柄.登陆确定)
+		
+		// 判断是否登陆：交错判断句柄是否存在
+		var isLogin = false
+		while(true){
+		    _, owner.句柄.验证码错误之确定 = winex.findExists( ,"确定","\#\d+","Button",2)
+		    _, owner.句柄.交易左侧菜单 = winex.findExists("网上股票交易系统5",,"Afx\:\d+\:b\:\d+\:\d+\:\w+","SysTreeView\d+",129)
+        	if (owner.句柄.验证码错误之确定) {winex.click(owner.句柄.验证码错误之确定); break} 
+            elseif (owner.句柄.交易左侧菜单) {isLogin = true; owner.log('验证码正确，正在登陆...', Flag); break}
+            else sleep(50)                   
+		} 
+		
+		// 通过检查持仓表格判断界面是否准备完全
+		if (isLogin) {		    	
+		    // 句柄的初始化 
+		    owner.句柄.交易顶层/* 查找句柄 */= winex.find("Afx\:\d+\:b\:\d+\:\d+\:\w+","网上股票交易系统5")         
+            owner.句柄.交易外边框/* 激活窗口 */ = winex.findExists("网上股票交易系统5",,"Afx\:\d+\:b\:\d+\:\d+\:\w+","AfxMDIFrame\d+s",59648)          		    	    		    
+		    _, owner.句柄.持仓表格 = winex.wait( "网上股票交易系统5","Custom\d+","Afx\:\d+\:b\:\d+\:\d+\:\w+","CVirtualGridCtrl",1047 )
+          	交易模块.getClipContent(owner.句柄.持仓表格, '可申赎数量')       // 等待界面刷新完毕
+          	// 放置窗口位置
+          	sleep(2500)   
+          	win.setPos(owner.句柄.交易外边框, 730, 0, 650, 360)   // 具体屏幕什么位置会记忆上一次摆放的位置
+			win.setFocus(owner.句柄.交易外边框) 
+          	owner.log('****** 账户信息概览 *******', Flag, '0x0A')                                                     
+            // 初次登陆买入股票界面，以便将句柄号确定下来
+            owner.查询账户资金(); sleep(500)  
+            owner.查询持仓(); sleep(500)
+            owner.撤单(); sleep(500)
+            owner.买卖(,,,'买入')
+            // 解决弹出无可撤委托bug
+             _, owner.句柄.无可撤委托之确定 = winex.findExists( ,"确定","\#\d+","Button",2)
+            if(owner.句柄.无可撤委托之确定) winex.click(owner.句柄.无可撤委托之确定)
+            owner.log('--------------------------<<< 交易软件已经就绪!', Flag, '0x0A') 
+		    break
+		} 
+		else continue
+    }   		
+}
+
+
+/*
+  结束程序
+*/
+交易模块.结束交易程序 = function(){
+    winex.quit(owner.句柄.交易外边框)
+    owner.log('--------------------------<<< 交易软件已经关闭!', Flag, '0x0A')
+}

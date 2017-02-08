@@ -1,0 +1,64 @@
+﻿// 通用 
+getCmd_struct = {int cmd}
+respondCmd_struct = {
+    int isOk;
+    byte msg[50];
+}
+
+
+// 命令[100] 登陆交易软件
+// getCmd_struct
+// respondCmd_struct
+
+
+// 命令[400] 关闭交易软件
+// getCmd_struct
+// respondCmd_struct
+
+
+// 命令[201] 查询账户资金
+// getCmd_struct
+capital_struct = {
+    float money_usable;
+    float money_total;
+}
+
+
+// 命令[202] 查询持仓
+// getCmd_struct
+num_struct = {
+    int num;
+}
+stockHave_struct = {
+    byte 代码[6];
+    byte 名称[30];
+    int 可用余额;
+    int 股票余额;
+    float 成本价;
+    float 市价;
+}
+
+// 命令[204] 查询可撤定单
+// getCmd_struct
+// order_struct
+
+
+
+// 命令[301] 买卖股票
+// getCmd_struct
+order_struct = {
+    byte 代码[6];    
+    int 委托数量;
+    float 委托价格;
+    byte 操作[4];
+    byte 名称[30];
+    byte 备注[30];
+    byte 委托时间[8];
+    byte 委托日期[8];   
+    byte 合同编号[12];     
+}
+
+// 命令[302] 撤单
+// getCmd_struct
+// order_struct
+// respondCmd_struct

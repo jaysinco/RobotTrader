@@ -1,0 +1,74 @@
+﻿loadcode($"\数据结构.aau")()
+
+进程通信 = {
+    // Win32 API 函数
+	CreateEvent = ::Kernel32.api("CreateEventA","pointer(struct& lpEventAttributes,int bManualReset,int bInitialState,string lpName)");
+	SetEvent = ::Kernel32.api( "SetEvent", "bool(pointer hEvent)");
+	ResetEvent = ::Kernel32.api( "ResetEvent", "bool(pointer hEvent)");
+	WaitForSingleObject = ::Kernel32.api("WaitForSingleObject","int(pointer hHandle,int dwMilliseconds)");
+	CreateFileMapping = ::Kernel32.api( "CreateFileMapping", "pointer(pointer hFile,struct lpAttributes,INT flProtect,INT dwMaximumSizeHigh,INT dwMaximumSizeLow,str lpName)");
+	OpenFileMapping = ::Kernel32.api( "OpenFileMapping", "pointer(INT desiredAccess,bool bInheritHandle,string lpName)");
+	MapViewOfFile = ::Kernel32.api( "MapViewOfFile", "pointer(pointer hFileMappingObject,INT desiredAccess,INT dwFileOffsetHigh,INT dwFileOffsetLow,INT dwNumberOfBytesToMap)");
+	UnmapViewOfFile = ::Kernel32.api( "UnmapViewOfFile", "bool(pointer lpBaseAddress)");  
+}
+
+
+进程通信.初始化 = function(){
+	// 文件映射
+	mapViewName = 'trader_msg'
+	eventAu_name = 'aauto_trigger'
+	eventPy_name = 'python_trigger'
+	Viewsize = 1024*1024
+	owner.Timeout = 0xFFFFFFFF  //无穷等待
+	owner.eventAu = owner.CreateEvent({},0x00000000,0x00000000,eventAu_name)
+	owner.eventPy = owner.CreateEvent({},0x00000000,0x00000000,eventPy_name)
+	owner.ResetEvent(owner.eventAu) 
+	owner.ResetEvent(owner.eventPy) 
+		
+	hFileMapping = owner.CreateFileMapping(_INVALID_HANDLE_VALUE,{},0x4,0,Viewsize,mapViewName)	
+	if(!hFileMapping) error("文件映射hFileMapping创建失败！")
+	
+	owner.hMapTmp = owner.MapViewOfFile(hFileMapping,0x2/*_FILE_MAP_ALL_ACCESS*/,0,0,Viewsize)
+    owner.ptr = topointer(owner.hMapTmp)
+} 
+
+进程通信.等待命令 = function(){
+    if (owner.WaitForSingleObject(owner.eventAu, owner.Timeout) == 0) {  
+    	// 获取命令号    
+    	..raw.convert(owner.ptr, getCmd_struct)
+    	return getCmd_struct.cmd
+    }
+}
+
+进程通信.读取单结构体 = function(结构体){  
+    ..raw.convert(topointer(owner.ptr, ..raw.sizeof(getCmd_struct)), 结构体)
+    return 结构体
+} 
+
+进程通信.回报单结构体 = function(结构体){   
+	::CopyMemory(owner.ptr, ..raw.malloc(结构体), ..raw.sizeof(结构体))
+	// 触发python信号 
+	owner.ResetEvent(owner.eventAu) 
+	owner.SetEvent(owner.eventPy)
+}
+
+进程通信.回报多结构体 = function(num, 结构体列表){   
+   // 写入结构体数量
+    num_struct.num = num
+	::CopyMemory(owner.ptr, ..raw.malloc(num_struct), ..raw.sizeof(num_struct))
+	var d_ptr = ..raw.sizeof(num_struct)
+	if (num >= 1){
+		var struct_size = ..raw.sizeof(结构体列表[1])
+		// 写入多结构体
+		for(i=1;num){
+	    	::CopyMemory(topointer(owner.ptr, d_ptr),..raw.malloc(结构体列表[i]), struct_size)
+	    	d_ptr += struct_size 
+		}
+	}
+	// 触发python信号 
+	owner.ResetEvent(owner.eventAu) 
+	owner.SetEvent(owner.eventPy)
+}
+
+// 进程初始化放在这里
+进程通信.初始化()

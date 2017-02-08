@@ -1,0 +1,119 @@
+﻿io.open()
+
+loadcode($"\交易模块.aau")()
+loadcode($"\进程通信.aau")()
+
+/*
+  交易系统初始化
+*/
+配置信息 = {   
+    // 配置信息     
+    用户名   =   "******";
+    密码     =   "******";
+    exePath  =   "..\..\同花顺交易软件\xiadan.exe";
+} 
+交易模块.初始化(配置信息)
+/*
+  命令循环
+*/
+
+交易模块.登陆() 
+
+while (true) {
+    交易模块.log('等待外部命令...', 'Order', '0x03')
+    var cmd = 进程通信.等待命令()
+    // 命令[100] 登陆交易软件
+    if (cmd == 100){
+        交易模块.log('收到命令号 -> 100 -> 启动交易软件', 'Order', '0x03')
+        交易模块.登陆() 
+        respondCmd_struct.isOk = 1
+		respondCmd_struct.msg = '交易软件登陆成功!' 
+		进程通信.回报单结构体(respondCmd_struct)       
+    }
+    // 命令[400] 关闭交易软件
+    else if(cmd == 400){
+        交易模块.log('收到命令号 -> 400 -> 关闭交易软件', 'Order', '0x03')
+        交易模块.结束交易程序()
+        respondCmd_struct.isOk = 1
+        respondCmd_struct.msg = '交易软件退出成功!' 
+        进程通信.回报单结构体(respondCmd_struct) 
+        break  // 退出程序
+    }
+    // 命令[201] 查询资金
+    else if(cmd == 201){
+        交易模块.log('收到命令号 -> 201 -> 查询资金', 'Order', '0x03')
+        var res = 交易模块.查询账户资金()
+        capital_struct.money_usable = res['可用资金']
+        capital_struct.money_total = res['总资产']
+        进程通信.回报单结构体(capital_struct) 
+    }
+    // 命令[202] 查询持仓
+    else if(cmd == 202){
+        交易模块.log('收到命令号 -> 202 -> 查询持仓', 'Order', '0x03')
+        var res = 交易模块.查询持仓()
+        var 持仓列表 = {}
+        for (i=1; #res){ 
+            stockHave_struct.代码 = res[i]["证券代码"]
+            stockHave_struct.名称 = res[i]["证券名称"]
+            stockHave_struct.可用余额 = res[i]["可用余额"]
+            stockHave_struct.股票余额 = res[i]["股票余额"]
+            stockHave_struct.成本价 = res[i]["成本价"]
+            stockHave_struct.市价 = res[i]["市价"]
+            持仓列表[#持仓列表+1] = table.clone(stockHave_struct)
+        }       
+        进程通信.回报多结构体(#持仓列表, 持仓列表) 
+    }
+    // 命令[203] 查询可撤委托单
+    else if(cmd == 203){
+        交易模块.log('收到命令号 -> 203 -> 查询可撤委托单', 'Order', '0x03')
+        var res = 交易模块.撤单()
+        var 订单列表 = {}
+        for (i=1; #res){
+            order_struct.代码 = res[i]["证券代码"]
+            order_struct.委托数量 = res[i]["委托数量"]
+            order_struct.委托价格 =  res[i]["委托价格"]
+            order_struct.操作 = res[i]["操作"]
+            order_struct.名称 = res[i]["证券名称"]
+            order_struct.备注 = res[i]["备注"]
+            order_struct.委托时间 = res[i]["委托时间"]
+            order_struct.委托日期 = res[i]["委托日期"]
+            order_struct.合同编号 =  res[i]["合同编号"]
+            订单列表[#订单列表+1] = table.clone(order_struct)
+        }
+        进程通信.回报多结构体(#订单列表, 订单列表) 
+    }
+    // 命令[301] 买卖
+    else if(cmd == 301){
+        交易模块.log('收到命令号 -> 301 -> 买卖股票', 'Order', '0x03')
+        var 订单 = 进程通信.读取单结构体(order_struct)
+        var 合同编号 = 交易模块.买卖(订单.代码, string.format("%.2f",订单.委托价格), string.format("%d",订单.委托数量), 订单.操作)
+        if (合同编号){
+             respondCmd_struct.isOk = 1
+             respondCmd_struct.msg = '订单提交成功!'
+        }else{
+             respondCmd_struct.isOk = 0
+             respondCmd_struct.msg = '订单提交失败!' 
+        }      
+        进程通信.回报单结构体(respondCmd_struct) 
+    }
+     // 命令[302] 撤单
+    else if(cmd == 302){
+        交易模块.log('收到命令号 -> 302 -> 撤单', 'Order', '0x03')
+        var 撤单 = 进程通信.读取单结构体(order_struct)
+        var statue = 交易模块.撤单(string.trim(撤单.合同编号,'\x00'))
+        if (statue == 1){
+             respondCmd_struct.isOk = 1
+             respondCmd_struct.msg = '撤单提交成功!'
+        }else{
+             respondCmd_struct.isOk = 0
+             respondCmd_struct.msg = '撤单提交失败!' 
+        }
+        进程通信.回报单结构体(respondCmd_struct)       
+    }
+    // 未知命令单
+    else
+        交易模块.log('收到未知命令号!', 'Error', '0x0C')
+}
+
+交易模块.日志关闭()
+execute("pause")
